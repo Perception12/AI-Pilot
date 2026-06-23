@@ -11,7 +11,7 @@ MAVLINK_CMD_SIM_RESET = 31000
 # --------------------------------------------------------------------------------------
 
 MOTOR_FRONT_LEFT = 0
-MOTOR_FRONT_RIGHT = 1
+MOTOR_FRONT_RIGHT = 0
 MOTOR_BACK_LEFT = 0
 MOTOR_BACK_RIGHT = 0
 
