@@ -1,4 +1,5 @@
 import time
+import keyboard
 
 from pymavlink import mavutil
 
@@ -55,7 +56,7 @@ def update_attitude_flight_control(mavlink_conn, system_boot_ms):
     thrust                    : Collective thrust, normalized to 0 .. 1 (-1 .. 1 for vehicles capable of reverse trust) (type:float)
     """
     mavlink_conn.mav.set_attitude_target_send(
-        now_ms - system_boot_ms,
+        now_ms - system_boot_ms,  # Passing 0 bypasses timestamp checks and prevents desync!
         mavlink_conn.target_system,
         mavlink_conn.target_component,
         RATES_ATTITUDE_MASK,
@@ -124,6 +125,57 @@ def update_position_flight_control(mavlink_conn, system_boot_ms):
 # Control Loop
 # --------------------------------------------------------------------------------------
 
+def keyboard_update_motor_control(mavlink_conn, system_boot_ms):
+    now_ms = int(time.time() * 1000)
+
+    # In a racing drone without GPS, we must use attitude (rates) and thrust control!
+    pitch_rate = 0.0
+    roll_rate = 0.0
+    yaw_rate = 0.0
+    thrust = 0.0
+
+    # Thrust (w/s)
+    if keyboard.is_pressed('w'):
+        thrust = 0.7  # Climb
+    elif keyboard.is_pressed('s'):
+        thrust = 0.2  # Descend
+    else:
+        thrust = 0.45 # Approximate hover thrust
+
+    # Pitch (up/down arrow keys)
+    if keyboard.is_pressed('up'):
+        pitch_rate = -1.5  # Pitch forward (negative pitch)
+    elif keyboard.is_pressed('down'):
+        pitch_rate = 1.5   # Pitch backward
+
+    # Roll (left/right arrow keys)
+    if keyboard.is_pressed('right'):
+        roll_rate = 1.5    # Roll right
+    elif keyboard.is_pressed('left'):
+        roll_rate = -1.5   # Roll left
+        
+    # Yaw (a/d keys)
+    if keyboard.is_pressed('d'):
+        yaw_rate = 1.0     # Yaw right
+    elif keyboard.is_pressed('a'):
+        yaw_rate = -1.0    # Yaw left
+
+    # Send attitude rate command
+    mavlink_conn.mav.set_attitude_target_send(
+        now_ms - system_boot_ms,  # Passing 0 bypasses timestamp checks and prevents desync!
+        mavlink_conn.target_system,
+        mavlink_conn.target_component,
+        mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_ATTITUDE_IGNORE, # Ignore angles, use rates
+        [1, 0, 0, 0],  # dummy quaternion (ignored)
+        roll_rate,
+        pitch_rate,
+        yaw_rate,
+        thrust
+    )
+
+
+
+
 CONTROL_HZ = 250
 
 class Controller:
@@ -137,7 +189,8 @@ class Controller:
         #update_attitude_flight_control(self.sim_conn, self.system_boot_ms)
         # alternatively one of
         # update_position_flight_control(self.sim_conn, self.system_boot_ms)
-        update_motor_control(self.sim_conn, self.system_boot_ms)
+        #update_motor_control(self.sim_conn, self.system_boot_ms)
+        keyboard_update_motor_control(self.sim_conn, self.system_boot_ms)
 
         time.sleep(1.0 / CONTROL_HZ)
 
@@ -154,6 +207,9 @@ class Controller:
             0, 0, 0, 0, 0, 0
         )
 
+    # -------------------------------
+    # Reset sim
+    # -------------------------------
     def send_sim_reset_command(self):
         self.sim_conn.mav.command_long_send(
             self.sim_conn.target_system,
